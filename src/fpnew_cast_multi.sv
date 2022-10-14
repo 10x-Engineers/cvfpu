@@ -408,11 +408,16 @@ module fpnew_cast_multi #(
   logic [2*INT_MAN_WIDTH:0]  destination_mant; // mantissa from shifter, with rnd bit
   logic [SUPER_MAN_BITS-1:0] final_mant;       // mantissa after adjustments
   logic [MAX_INT_WIDTH-1:0]  final_int;        // integer shifted in position
+  logic [INT_MAN_WIDTH-1:0] check_mantissa;    // checking mantissa for max negative range
 
   logic [$clog2(INT_MAN_WIDTH+1)-1:0] denorm_shamt; // shift amount for denormalization
 
   logic [1:0] fp_round_sticky_bits, int_round_sticky_bits, round_sticky_bits;
   logic       of_before_round, uf_before_round;
+  logic       mant_of;                          // Check mantissa overflow for max negative integer
+
+  assign check_mantissa = input_mant_q << 1;
+  assign mant_of        = | check_mantissa;
 
 
   // Perform adjustments to mantissa and exponent
@@ -432,7 +437,9 @@ module fpnew_cast_multi #(
       // By default right shift mantissa to be an integer
       denorm_shamt = unsigned'(MAX_INT_WIDTH - 1 - input_exp_q);
       // overflow: when converting to unsigned the range is larger by one
-      if (input_exp_q >= signed'(fpnew_pkg::int_width(int_fmt_q2) - 1 + op_mod_q2)) begin
+      if(input_sign_q && input_exp_q == signed'(fpnew_pkg::int_width(int_fmt_q2) - 1 + op_mod_q2) && !mant_of) begin  // giving corner case highest priority
+        denorm_shamt    = '0; // prevent shifting
+      end else if (input_exp_q >= signed'(fpnew_pkg::int_width(int_fmt_q2) - 1 + op_mod_q2)) begin
         denorm_shamt    = '0; // prevent shifting
         of_before_round = 1'b1;
       // underflow
